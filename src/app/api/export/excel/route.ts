@@ -343,113 +343,153 @@ export async function POST(request: NextRequest) {
     // ignore logo errors — template logos remain
   }
 
-  // ── Find items header row (contains "Specification") ─────────────────────
+  // ── Find items header row + Remark anchor ────────────────────────────────
   const itemHeaderRow = findRowByExact(ws, 'Specification')
   if (!itemHeaderRow) {
     return new NextResponse('Template error: could not find Specification header', { status: 500 })
   }
-
-  // Find "Remark：" row
   const remarkRow = findRowByPrefix(ws, 'Remark')
-  const itemsEndRow = remarkRow ? remarkRow - 1 : itemHeaderRow + 20
-
-  // Existing placeholder rows to delete (rows between itemHeaderRow+1 and itemsEndRow)
+  if (!remarkRow) {
+    return new NextResponse('Template error: could not find Remark row', { status: 500 })
+  }
   const firstItemRow = itemHeaderRow + 1
-  const existingPlaceholderCount = itemsEndRow - firstItemRow + 1
 
-  // ── Build flat row list ───────────────────────────────────────────────────
-  const flatRows = buildRows(lineItems)
+  // ── Snapshot footer (Remark onwards): values + merges + heights ──────────
+  type CellSnap = { col: number; value: ExcelJS.CellValue; font?: Partial<ExcelJS.Font>; alignment?: Partial<ExcelJS.Alignment>; numFmt?: string }
+  type RowSnap = { offset: number; height?: number; cells: CellSnap[] }
+  type MergeSnap = { offset: number; left: number; bottom: number; right: number }
 
-  // ── Write item rows ───────────────────────────────────────────────────────
-  // Strategy: use the first existing placeholder row as style template,
-  // insert new rows before it, then delete placeholders.
+  const colToNum = (s: string) => s.split('').reduce((a, c) => a * 26 + (c.charCodeAt(0) - 64), 0)
+  const allMergeStrings = (ws.model.merges ?? []) as string[]
+  const allMerges = allMergeStrings
+    .map((m) => /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(m))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({
+      left: colToNum(m[1]),
+      top: parseInt(m[2], 10),
+      right: colToNum(m[3]),
+      bottom: parseInt(m[4], 10),
+    }))
 
-  // Get style template from first data row
-  const styleTemplateRow = firstItemRow
+  const footerRowSnaps: RowSnap[] = []
+  for (let r = remarkRow; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    const snap: RowSnap = { offset: r - remarkRow, height: row.height, cells: [] }
+    for (let c = 1; c <= 12; c++) {
+      const cell = row.getCell(c)
+      if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+        snap.cells.push({
+          col: c,
+          value: cell.value,
+          font: cell.font ? { ...cell.font } : undefined,
+          alignment: cell.alignment ? { ...cell.alignment } : undefined,
+          numFmt: cell.numFmt,
+        })
+      }
+    }
+    footerRowSnaps.push(snap)
+  }
+  const footerMergeSnaps: MergeSnap[] = allMerges
+    .filter((m) => m.top >= remarkRow)
+    .map((m) => ({ offset: m.top - remarkRow, left: m.left, bottom: m.bottom - remarkRow, right: m.right }))
 
-  // Insert rows for all our items BEFORE the placeholder rows
-  // (inserting at firstItemRow repeatedly pushes old rows down)
-  const totalNewRows = flatRows.length
-
-  // Insert blank rows in bulk
-  if (totalNewRows > 0) {
-    ws.spliceRows(firstItemRow, 0, ...Array(totalNewRows).fill([]))
+  // ── Wipe everything from firstItemRow downwards (values + merges) ────────
+  // Drop merges in/below items zone (keep header-area merges)
+  const wsAny = ws as unknown as { _merges?: Record<string, { top: number }> }
+  if (wsAny._merges) {
+    for (const key of Object.keys(wsAny._merges)) {
+      const m = wsAny._merges[key]
+      if (m.top >= firstItemRow) delete wsAny._merges[key]
+    }
+  }
+  // Clear cell values from items zone + footer
+  for (let r = firstItemRow; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    for (let c = 1; c <= 13; c++) {
+      row.getCell(c).value = null
+    }
   }
 
-  // Apply styles from template row (now shifted down by totalNewRows)
-  const templateDataRow = firstItemRow + totalNewRows
+  // ── Write item rows ───────────────────────────────────────────────────────
+  const flatRows = buildRows(lineItems)
+  let cursor = firstItemRow
 
-  for (let i = 0; i < flatRows.length; i++) {
-    const fr = flatRows[i]
-    const rowNum = firstItemRow + i
-    const row = ws.getRow(rowNum)
-
-    // Copy style from template row
-    copyRowStyle(ws, templateDataRow, rowNum)
+  for (const fr of flatRows) {
+    const row = ws.getRow(cursor)
 
     if (fr.isSectionHeader) {
-      // Section header row — write label spanning A through I, grey style
       row.getCell(1).value = fr.sectionLabel ?? ''
       row.getCell(1).font = { bold: true, name: 'Arial', size: 10 }
       row.getCell(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
+        type: 'pattern', pattern: 'solid',
         fgColor: { argb: 'FFD9D9D9' },
       }
-      // Merge A through I for section header
-      try {
-        ws.mergeCells(rowNum, 1, rowNum, 9)
-      } catch {
-        // already merged or overlap
-      }
+      row.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+      try { ws.mergeCells(cursor, 1, cursor, 10) } catch { /* ignore */ }
       row.height = 18
     } else {
-      // Regular item row
-      row.getCell(1).value = fr.itemNum // Item #
-      row.getCell(2).value = fr.model   // Model
+      row.getCell(1).value = fr.itemNum
+      row.getCell(1).font = { name: 'Arial', size: 10 }
+      row.getCell(1).alignment = { vertical: 'top', horizontal: 'center' }
 
-      // Specification goes in D, merged D:I (same as template)
+      row.getCell(2).value = fr.model
+      row.getCell(2).font = { name: 'Arial', size: 10 }
+      row.getCell(2).alignment = { vertical: 'top', horizontal: 'center', wrapText: true }
+
       row.getCell(4).value = fr.spec
+      row.getCell(4).font = { name: 'Arial', size: 10 }
       row.getCell(4).alignment = { wrapText: true, vertical: 'top' }
+      try { ws.mergeCells(cursor, 4, cursor, 9) } catch { /* ignore */ }
 
-      // Unit Price in col J (10)
       const priceVal = typeof fr.unitPrice === 'number' ? fr.unitPrice : 0
       row.getCell(10).value = priceVal
       row.getCell(10).numFmt = '"USD"#,##0.00'
+      row.getCell(10).font = { name: 'Arial', size: 10 }
+      row.getCell(10).alignment = { vertical: 'top', horizontal: 'right' }
 
-      // Merge D:I for spec
-      try {
-        ws.mergeCells(rowNum, 4, rowNum, 9)
-      } catch {
-        // already merged
-      }
-
-      // Set row height based on spec length
       const lineCount = (fr.spec.match(/\n/g) || []).length + 1
-      row.height = Math.max(18, lineCount * 16)
+      row.height = Math.max(18, lineCount * 14)
     }
-
     row.commit()
+    cursor++
   }
 
-  // Remove the old placeholder rows (now shifted down by totalNewRows)
-  ws.spliceRows(firstItemRow + totalNewRows, existingPlaceholderCount)
+  // ── Total row (right after items) ────────────────────────────────────────
+  {
+    const row = ws.getRow(cursor)
+    // Label spans D-I (where Specification is) so it sits next to the price
+    row.getCell(4).value = 'TOTAL'
+    row.getCell(4).font = { bold: true, name: 'Arial', size: 11 }
+    row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+    try { ws.mergeCells(cursor, 4, cursor, 9) } catch { /* ignore */ }
+    row.getCell(10).value = totals.grandTotal
+    row.getCell(10).numFmt = '"USD"#,##0.00'
+    row.getCell(10).font = { bold: true, name: 'Arial', size: 11 }
+    row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' }
+    row.height = 22
+    row.commit()
+    cursor++
+  }
 
-  // ── Grand total row (insert before Remark) ────────────────────────────────
-  // Find remark row again (it may have shifted)
-  const newRemarkRow = findRowByPrefix(ws, 'Remark')
-  if (newRemarkRow) {
-    // Insert a total row just before remark
-    ws.spliceRows(newRemarkRow, 0, [])
-    const totalRow = ws.getRow(newRemarkRow)
-    totalRow.getCell(9).value = 'TOTAL'
-    totalRow.getCell(9).font = { bold: true, name: 'Arial', size: 10 }
-    totalRow.getCell(9).alignment = { horizontal: 'right' }
-    totalRow.getCell(10).value = totals.grandTotal
-    totalRow.getCell(10).numFmt = '"USD"#,##0.00'
-    totalRow.getCell(10).font = { bold: true, name: 'Arial', size: 10 }
-    totalRow.height = 20
-    totalRow.commit()
+  // ── Replay footer (Remark + terms + signature block) ─────────────────────
+  const footerStart = cursor
+  for (const snap of footerRowSnaps) {
+    const targetRow = footerStart + snap.offset
+    const row = ws.getRow(targetRow)
+    if (snap.height) row.height = snap.height
+    for (const cs of snap.cells) {
+      const cell = row.getCell(cs.col)
+      cell.value = cs.value
+      if (cs.font) cell.font = cs.font
+      if (cs.alignment) cell.alignment = cs.alignment
+      if (cs.numFmt) cell.numFmt = cs.numFmt
+    }
+    row.commit()
+  }
+  for (const m of footerMergeSnaps) {
+    const top = footerStart + m.offset
+    const bottom = footerStart + m.bottom
+    try { ws.mergeCells(top, m.left, bottom, m.right) } catch { /* ignore */ }
   }
 
   // ── Write buffer ──────────────────────────────────────────────────────────

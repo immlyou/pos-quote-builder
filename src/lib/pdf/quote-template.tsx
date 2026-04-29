@@ -32,7 +32,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  logo: { width: 120, height: 52, objectFit: 'contain' },
+  logo: { width: 120, height: 50, objectFit: 'contain' },
+  logoRight: { width: 50, height: 70, objectFit: 'contain' },
+  topCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bigTitle: {
     fontSize: 26,
     fontFamily: 'Helvetica-Bold',
@@ -188,7 +190,12 @@ function fmt(n: number): string {
 }
 
 interface Props {
-  payload: ExportPayload & { expiresAt?: string | null; terms?: string[] }
+  payload: ExportPayload & {
+    expiresAt?: string | null
+    terms?: string[]
+    templateLeftLogo?: string | null
+    templateRightLogo?: string | null
+  }
 }
 
 export function QuotePDF({ payload }: Props) {
@@ -256,16 +263,25 @@ export function QuotePDF({ payload }: Props) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Top band: logo left, QUOTATION right */}
+        {/* Top band: left logo (Partner Tech / custom), QUOTATION centered, right logo (BenQ Group) */}
         <View style={styles.topBand}>
           <View>
             {profile?.logoDataUrl ? (
               <Image src={profile.logoDataUrl} style={styles.logo} />
+            ) : payload.templateLeftLogo ? (
+              <Image src={payload.templateLeftLogo} style={styles.logo} />
             ) : (
               <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: DARK }}>{sellerName}</Text>
             )}
           </View>
-          <Text style={styles.bigTitle}>QUOTATION</Text>
+          <View style={styles.topCenter}>
+            <Text style={styles.bigTitle}>QUOTATION</Text>
+          </View>
+          <View>
+            {payload.templateRightLogo ? (
+              <Image src={payload.templateRightLogo} style={styles.logoRight} />
+            ) : null}
+          </View>
         </View>
 
         {/* Info grid */}

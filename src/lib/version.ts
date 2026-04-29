@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.1.0'
+export const APP_VERSION = '1.1.2'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,30 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.2',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: 'PDF 匯出加上左右兩個 logo（左：Partner Tech 主 logo / 右：BenQ Group），與 Excel 模板一致',
+        en: 'PDF export now shows both header logos (left: Partner Tech / right: BenQ Group), matching the Excel template',
+      },
+    ],
+  },
+  {
+    version: '1.1.1',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '修正 Excel 匯出時 Remark 條款被複製到多個欄位的視覺 bug — 改用 footer snapshot/replay 重建合併儲存格',
+        en: 'Fix Excel export bug where Remark terms appeared duplicated across columns — footer is now snapshot/replayed to preserve merged cells',
+      },
+      {
+        zh: 'TOTAL 列調整為「右靠價格欄」呈現，與週邊報價視覺一致',
+        en: 'TOTAL row label now sits right-aligned next to the price column for visual consistency',
+      },
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-04-29',
