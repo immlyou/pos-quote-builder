@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.0.0'
+export const APP_VERSION = '1.1.0'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,36 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: 'Excel / PDF 匯出改用 PTAP 官方模板填值（不再自繪版面）',
+        en: 'Excel / PDF exports now fill the official PTAP template (no more drawn layouts)',
+      },
+      {
+        zh: '兩個 header logo 自動保留（左 Partner Tech、右 BenQ Group）；自訂 logo 只取代左側',
+        en: 'Both header logos preserved (left: Partner Tech, right: BenQ Group); custom logo replaces left only',
+      },
+      {
+        zh: 'PTC 分頁中段產品圖自動清掉，避免列印外洩',
+        en: 'Mid-page product images on PTC sheet auto-stripped to avoid leaking on print',
+      },
+      {
+        zh: '新增報價公司主體切換（PTT 台灣亞太 / PTC 上海），條款自動套對應版本',
+        en: 'Added quote entity switcher (PTT / PTC) with auto-applied remark terms',
+      },
+      {
+        zh: '新增「顯示內部成本」開關，預設關閉避免成本/毛利欄位外露',
+        en: 'Added "Include internal costs" toggle, off by default to hide cost/margin from clients',
+      },
+      {
+        zh: '主機 + 週邊以 1 / 1.1 / 1.2 階層編號呈現，符合原模板分組樣式',
+        en: 'Items hierarchically numbered 1 / 1.1 / 1.2 with peripheral group headers matching template',
+      },
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-04-29',
