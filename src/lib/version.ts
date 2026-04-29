@@ -1,0 +1,188 @@
+export const APP_VERSION = '1.0.0'
+
+export interface ChangelogEntry {
+  version: string
+  date: string
+  highlights: { zh: string; en: string }[]
+}
+
+export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.0.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '客戶 360° 詳情頁：報價時間軸 + 勝率 / 平均回覆天數 / 冷熱徽章',
+        en: 'Customer 360° page: quote timeline + win rate / avg respond days / heat badge',
+      },
+      {
+        zh: '客戶標籤系統：自由標籤 + 列表頁標籤篩選',
+        en: 'Customer tags: free-form labels + tag filter on list page',
+      },
+      {
+        zh: '報價跟進日期 + 儀表板「今日要追」widget（逾期紅標）',
+        en: 'Quote next-follow-up + dashboard "Today\'s follow-ups" widget (overdue red)',
+      },
+      {
+        zh: '報價瀏覽追蹤：客戶開啟分享連結時記錄次數 + 時間',
+        en: 'Quote view tracking: counts views + last viewed time when share link opened',
+      },
+      {
+        zh: '修訂版本價差視覺化（v2 vs v1 降價 / 加價）',
+        en: 'Revision price diff visualization (v2 vs v1 drop / up)',
+      },
+      {
+        zh: '平均成交天數 KPI（sent → accepted 時長）',
+        en: 'Average days to close KPI (sent → accepted duration)',
+      },
+      {
+        zh: '報價詳情頁活動條：瀏覽 / 發出 / 寄信 / 回覆 4 個時間戳',
+        en: 'Quote detail activity strip: views / sent / emailed / responded 4 timestamps',
+      },
+    ],
+  },
+  {
+    version: '0.8.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: 'PDF 重新設計：Bill To 區塊、條款、簽名欄、頁碼、Valid Until',
+        en: 'PDF redesigned: Bill To, T&C, signature blocks, page numbers, Valid Until',
+      },
+      {
+        zh: '公開分享連結：產生 token URL 給客戶線上接受 / 拒絕',
+        en: 'Public share links: token URL lets customers accept/reject online',
+      },
+      {
+        zh: 'Email 寄送（Resend）：附上 PDF + 分享連結，需設定 RESEND_API_KEY',
+        en: 'Email via Resend: attaches PDF + share link, requires RESEND_API_KEY',
+      },
+    ],
+  },
+  {
+    version: '0.7.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '營運儀表板：本月成交 / 在案 / 勝率 / 累計營收 4 大 KPI',
+        en: 'Business dashboard: 4 KPIs — month won, pipeline, win rate, lifetime revenue',
+      },
+      {
+        zh: '6 個月趨勢柱狀圖（總額 vs 成交）',
+        en: '6-month trend bar chart (total vs accepted)',
+      },
+      {
+        zh: '狀態漏斗 + Top 5 客戶 + 業務員績效表',
+        en: 'Status funnel + Top 5 customers + salesperson scoreboard',
+      },
+    ],
+  },
+  {
+    version: '0.6.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '客戶名稱欄位自動補全（從客戶 DB 撈建議）',
+        en: 'Customer name auto-complete (suggestions from customer DB)',
+      },
+      {
+        zh: '報價詳情頁新增「複製」按鈕，一鍵 duplicate 含選項',
+        en: 'Duplicate button on detail page — one-click copy with all selections',
+      },
+      {
+        zh: '數量輸入支援千分位顯示，避免大數字看錯位數',
+        en: 'Qty input shows thousands separator to prevent misreads',
+      },
+      {
+        zh: 'Vercel Cron：每日午夜自動把 sent + 已過期的報價標為 expired',
+        en: 'Vercel Cron: daily midnight job flips sent quotes past expiry to expired',
+      },
+    ],
+  },
+  {
+    version: '0.5.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '客戶管理頁：CRUD、自訂客戶代碼、累計報價數 / 總金額 / 最近報價',
+        en: 'Customer management page: CRUD, custom codes, quote count / total value / last quote',
+      },
+      {
+        zh: '報價狀態看板：6 欄 Kanban 視覺化，下拉一鍵切換狀態',
+        en: 'Quote status board: 6-column kanban with one-click status moves',
+      },
+      {
+        zh: '導覽列新增「看板」與「客戶」頁籤',
+        en: 'Navbar adds Board and Customers tabs',
+      },
+    ],
+  },
+  {
+    version: '0.4.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '報價詳情頁新增「編輯」按鈕，將既有報價載入主畫面修改',
+        en: 'Edit button on detail page reloads quote into main configurator',
+      },
+      {
+        zh: '主畫面進入編輯模式時顯示橘色 banner，並提供兩種儲存模式',
+        en: 'Edit-mode banner on main panel with two save options',
+      },
+      {
+        zh: '「更新此版本」直接覆蓋；「儲存為新版本」自動掛 parent_quote_id 並產生 -r2 編號',
+        en: 'Update saves in-place; Save-as-new-revision creates a child quote with parent linkage and -r2 quote number',
+      },
+    ],
+  },
+  {
+    version: '0.3.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '報價歷史頁：列表 + 篩選（客戶 / 狀態 / 日期）',
+        en: 'Quote history page: list with filters (customer / status / date)',
+      },
+      {
+        zh: '報價詳情頁：完整明細、狀態切換、刪除',
+        en: 'Quote detail page: full line items, status update, delete',
+      },
+      {
+        zh: '主畫面新增「儲存報價」按鈕，自動建立 / 連結客戶',
+        en: 'Save Quote button on main panel, auto-create / link customer',
+      },
+    ],
+  },
+  {
+    version: '0.2.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '報價資料庫上雲：Neon Postgres 整合、首頁改為 runtime 讀取',
+        en: 'Catalog moved to cloud: Neon Postgres integration, runtime catalog loading',
+      },
+      {
+        zh: '設定頁新增 Excel (.xlsx) 上傳，可線上更新報價資料庫',
+        en: 'Settings page now supports Excel (.xlsx) upload to refresh the catalog online',
+      },
+      {
+        zh: 'TypeScript 取代 Python parser，無需本機 build step',
+        en: 'TypeScript parser replaces Python — no local build step needed',
+      },
+    ],
+  },
+  {
+    version: '0.1.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '初版上線：報價配置器、PDF / Excel 匯出、公司抬頭管理、雙語切換',
+        en: 'Initial release: quote configurator, PDF / Excel export, company profile manager, zh / en locale switch',
+      },
+      {
+        zh: '部署至 Vercel、行動裝置 RWD 排版',
+        en: 'Deployed to Vercel, mobile-friendly responsive layout',
+      },
+    ],
+  },
+]
