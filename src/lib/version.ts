@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.2.0'
+export const APP_VERSION = '1.2.1'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.1',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '修正毛利徽章顯示 — 固定 $ 加成在數量 > 1 時顯示「總加成金額」（成本 + 徽章 = 客戶價），不再顯示誤導的單位加成',
+        en: 'Fix margin badge display — fixed $ markup now shows total amount added (cost + badge = customer price) when qty > 1, no longer shows misleading per-unit value',
+      },
+    ],
+  },
   {
     version: '1.2.0',
     date: '2026-04-29',

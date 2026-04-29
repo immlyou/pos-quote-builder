@@ -575,8 +575,8 @@ export function SummaryPanel({ models }: Props) {
                       {t.costPrice}: {formatUSD(item.costPrice)}
                     </span>
                     {marginValue > 0 && (
-                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px]">
-                        +{marginType === 'percent' ? `${marginValue}%` : formatUSD(marginValue)}
+                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px]" title={marginType === 'percent' ? `${marginValue}% per unit` : `+${formatUSD(marginValue)} per unit`}>
+                        {marginType === 'percent' ? `+${marginValue}%` : `+${formatUSD(item.marginAmount)}`}
                       </span>
                     )}
                     <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px]">
