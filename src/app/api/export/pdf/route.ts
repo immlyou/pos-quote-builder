@@ -18,10 +18,10 @@ async function loadTemplateLogos() {
   const root = process.cwd()
   try {
     const [leftBuf, rightBuf] = await Promise.all([
-      fs.readFile(path.join(root, 'public', 'template-assets', 'image1.jpeg')),
+      fs.readFile(path.join(root, 'public', 'template-assets', 'logo-partner.png')),
       fs.readFile(path.join(root, 'public', 'template-assets', 'logo-benq.png')),
     ])
-    leftLogoCache = `data:image/jpeg;base64,${leftBuf.toString('base64')}`
+    leftLogoCache = `data:image/png;base64,${leftBuf.toString('base64')}`
     rightLogoCache = `data:image/png;base64,${rightBuf.toString('base64')}`
   } catch {
     // logos optional — PDF will render without them

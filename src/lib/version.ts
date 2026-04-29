@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.1.2'
+export const APP_VERSION = '1.1.3'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,20 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.1.3',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '修正 PDF 抓錯 logo 檔的 bug（誤抓成產品照片）— 改用 drawing relationships 反查正確的 image7/image8.png',
+        en: 'Fix PDF logo bug (was extracting product photos instead of logos) — now traces drawing relationships to map the correct image files',
+      },
+      {
+        zh: 'PDF logo 尺寸調整為符合原始長寬比',
+        en: 'PDF logo dimensions adjusted to match original aspect ratios',
+      },
+    ],
+  },
   {
     version: '1.1.2',
     date: '2026-04-29',

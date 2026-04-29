@@ -32,8 +32,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  logo: { width: 120, height: 50, objectFit: 'contain' },
-  logoRight: { width: 50, height: 70, objectFit: 'contain' },
+  logo: { width: 140, height: 42, objectFit: 'contain' },
+  logoRight: { width: 80, height: 32, objectFit: 'contain' },
   topCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bigTitle: {
     fontSize: 26,
