@@ -79,6 +79,9 @@ interface FlatRow {
   spec: string
   unitPrice: number | string
   qty: number
+  costPrice?: number
+  marginAmount?: number
+  marginPercent?: number
   isSectionHeader?: boolean
   sectionLabel?: string
 }
@@ -86,17 +89,15 @@ interface FlatRow {
 function buildRows(lineItems: LineItem[]): FlatRow[] {
   const rows: FlatRow[] = []
 
-  // Group: base models + their peripherals
-  const baseItems = lineItems.filter((i) => i.category === 'Base Model' || i.category === 'Add-on Module' || i.category === 'Upgrade')
-  const peripheralItems = lineItems.filter((i) => i.category === 'Peripheral')
-  const licenseItems = lineItems.filter((i) => i.category === 'License')
-  const otherItems = lineItems.filter((i) => i.category !== 'Base Model' && i.category !== 'Add-on Module' && i.category !== 'Upgrade' && i.category !== 'Peripheral' && i.category !== 'License')
-
-  let mainItemNum = 1
-
-  // Base models (Base Model category only get integer numbers; upgrades/add-ons get sub-rows)
   const baseModelItems = lineItems.filter((i) => i.category === 'Base Model')
   const upgradeItems = lineItems.filter((i) => i.category === 'Add-on Module' || i.category === 'Upgrade')
+  const peripheralItems = lineItems.filter((i) => i.category === 'Peripheral')
+  const licenseItems = lineItems.filter((i) => i.category === 'License')
+  const otherItems = lineItems.filter(
+    (i) => i.category !== 'Base Model' && i.category !== 'Add-on Module' && i.category !== 'Upgrade' && i.category !== 'Peripheral' && i.category !== 'License'
+  )
+
+  let mainItemNum = 1
 
   for (const bm of baseModelItems) {
     rows.push({
@@ -105,9 +106,11 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
       spec: bm.description,
       unitPrice: bm.unitPrice,
       qty: bm.qty,
+      costPrice: bm.costPrice,
+      marginAmount: bm.marginAmount,
+      marginPercent: bm.marginPercent,
     })
 
-    // Upgrades attached to this base model
     if (upgradeItems.length > 0) {
       let subNum = 1
       for (const u of upgradeItems) {
@@ -117,6 +120,9 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
           spec: u.description,
           unitPrice: u.unitPrice,
           qty: u.qty,
+          costPrice: u.costPrice,
+          marginAmount: u.marginAmount,
+          marginPercent: u.marginPercent,
         })
         subNum++
       }
@@ -125,7 +131,6 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
     mainItemNum++
   }
 
-  // Peripherals section
   if (peripheralItems.length > 0) {
     rows.push({
       itemNum: '',
@@ -143,12 +148,14 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
         spec: p.description,
         unitPrice: p.unitPrice,
         qty: p.qty,
+        costPrice: p.costPrice,
+        marginAmount: p.marginAmount,
+        marginPercent: p.marginPercent,
       })
       mainItemNum++
     }
   }
 
-  // Licenses section
   if (licenseItems.length > 0) {
     rows.push({
       itemNum: '',
@@ -166,12 +173,14 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
         spec: l.description,
         unitPrice: l.unitPrice,
         qty: l.qty,
+        costPrice: l.costPrice,
+        marginAmount: l.marginAmount,
+        marginPercent: l.marginPercent,
       })
       mainItemNum++
     }
   }
 
-  // Others section
   if (otherItems.length > 0) {
     rows.push({
       itemNum: '',
@@ -189,6 +198,9 @@ function buildRows(lineItems: LineItem[]): FlatRow[] {
         spec: o.description,
         unitPrice: o.unitPrice,
         qty: o.qty,
+        costPrice: o.costPrice,
+        marginAmount: o.marginAmount,
+        marginPercent: o.marginPercent,
       })
       mainItemNum++
     }
@@ -205,11 +217,16 @@ export async function POST(request: NextRequest) {
   const entity: QuoteEntity = payload.entity ?? 'PTT'
   const includeInternalCosts = payload.includeInternalCosts ?? false
 
+  // Derive cost/margin totals with backwards-compat fallback
+  const customerTotal = totals.customerTotal ?? totals.grandTotal ?? 0
+  const costTotal = totals.costTotal ?? customerTotal
+  const marginTotal = totals.marginTotal ?? (customerTotal - costTotal)
+  const marginPercentAvg = totals.marginPercentAvg ?? (costTotal > 0 ? (customerTotal / costTotal - 1) * 100 : 0)
+
   // Load template
   const templatePath = path.join(process.cwd(), 'data', 'quote-template.xlsx')
   const templateBuffer = await fs.readFile(templatePath)
   const wb = new ExcelJS.Workbook()
-  // ExcelJS expects an ArrayBuffer-like input; convert Node Buffer
   await wb.xlsx.load(
     templateBuffer.buffer.slice(
       templateBuffer.byteOffset,
@@ -229,33 +246,26 @@ export async function POST(request: NextRequest) {
 
   // ── Fill header zone ────────────────────────────────────────────────────
 
-  // Company Name row (A col)
   const companyNameRow = findRowByPrefix(ws, 'Company Name:')
   if (companyNameRow) {
     setLabelCell(ws, companyNameRow, findColByPrefix(ws, companyNameRow, 'Company Name:')!, quoteMeta.customer)
 
-    // Date on same row (H col)
     const dateCol = findColByPrefix(ws, companyNameRow, 'Date:')
     if (dateCol) {
-      // Date is actually split across two cells: H="Date: " I=formula
-      // We'll set the I cell to the actual date string
       const iCell = ws.getRow(companyNameRow).getCell(dateCol + 1)
       iCell.value = quoteMeta.date
     }
   }
 
-  // Customer Name row
   const customerNameRow = findRowByPrefix(ws, 'Customer Name:')
   if (customerNameRow) {
     const custCol = findColByPrefix(ws, customerNameRow, 'Customer Name:')
     if (custCol) setLabelCell(ws, customerNameRow, custCol, quoteMeta.customer)
 
-    // Sales on same row
     const salesCol = findColByPrefix(ws, customerNameRow, 'Sales:')
     if (salesCol) setLabelCell(ws, customerNameRow, salesCol, quoteMeta.preparedBy)
   }
 
-  // Phone row — left side is customer phone (we leave static label pattern, fill from profile)
   const phoneRow = findRowByPrefix(ws, 'Phone:')
   if (phoneRow) {
     const phoneCol = findColByPrefix(ws, phoneRow, 'Phone:')
@@ -263,10 +273,8 @@ export async function POST(request: NextRequest) {
       const customerPhone = profile?.phone ?? ''
       setLabelCell(ws, phoneRow, phoneCol, customerPhone)
     }
-    // H col "Phone: (02)2918-8500 Ext." is static — leave it
   }
 
-  // Email row — left is customer email
   const emailRow = findRowByPrefix(ws, 'Email:')
   if (emailRow) {
     const emailCol = findColByPrefix(ws, emailRow, 'Email:')
@@ -274,10 +282,8 @@ export async function POST(request: NextRequest) {
       const customerEmail = profile?.email ?? ''
       setLabelCell(ws, emailRow, emailCol, customerEmail)
     }
-    // H col "Fax:" is static — leave it
   }
 
-  // Email Address (sales rep email) — H col
   const emailAddrRow = findRowByPrefix(ws, 'Email Address:')
   if (emailAddrRow) {
     const eaCol = findColByPrefix(ws, emailAddrRow, 'Email Address:')
@@ -290,15 +296,13 @@ export async function POST(request: NextRequest) {
     ws.getColumn('K').hidden = true
     ws.getColumn('L').hidden = true
     ws.getColumn('M').hidden = true
+  } else {
+    ws.getColumn('K').hidden = false
+    ws.getColumn('L').hidden = false
+    ws.getColumn('M').hidden = false
   }
 
   // ── Logo handling ────────────────────────────────────────────────────────
-  // Template ships with two header logos:
-  //   - top-LEFT  (anchored ~A1)  : Partner Tech main logo
-  //   - top-RIGHT (anchored ~H2)  : BenQ Group sub-logo
-  // PTC sheet also has product images embedded mid-page (rows 16, 19).
-  // We always strip mid-page product images, always keep both header logos,
-  // and only replace the LEFT logo when the user supplied a custom one.
   try {
     type MediaEntry = {
       type?: string
@@ -306,14 +310,11 @@ export async function POST(request: NextRequest) {
     }
     const wsAny = ws as unknown as { _media?: MediaEntry[] }
     if (Array.isArray(wsAny._media)) {
-      // Drop everything anchored at row >= 6 (product / mid-page images)
       const headerOnly = wsAny._media.filter(
         (m) => (m.range?.tl?.nativeRow ?? 0) < 6,
       )
 
       if (profile?.logoDataUrl) {
-        // Remove the LEFT logo (smallest col) so user logo replaces it,
-        // but keep the right BenQ logo
         let leftIdx = -1
         let minCol = Number.POSITIVE_INFINITY
         headerOnly.forEach((m, i) => {
@@ -353,6 +354,21 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Template error: could not find Remark row', { status: 500 })
   }
   const firstItemRow = itemHeaderRow + 1
+
+  // ── Write internal cost headers if needed ───────────────────────────────
+  if (includeInternalCosts) {
+    const headerRow = ws.getRow(itemHeaderRow)
+    headerRow.getCell(11).value = 'Cost'
+    headerRow.getCell(11).font = { bold: true, name: 'Arial', size: 10 }
+    headerRow.getCell(11).alignment = { horizontal: 'right', vertical: 'middle' }
+    headerRow.getCell(12).value = 'Margin $'
+    headerRow.getCell(12).font = { bold: true, name: 'Arial', size: 10 }
+    headerRow.getCell(12).alignment = { horizontal: 'right', vertical: 'middle' }
+    headerRow.getCell(13).value = 'Margin %'
+    headerRow.getCell(13).font = { bold: true, name: 'Arial', size: 10 }
+    headerRow.getCell(13).alignment = { horizontal: 'right', vertical: 'middle' }
+    headerRow.commit()
+  }
 
   // ── Snapshot footer (Remark onwards): values + merges + heights ──────────
   type CellSnap = { col: number; value: ExcelJS.CellValue; font?: Partial<ExcelJS.Font>; alignment?: Partial<ExcelJS.Alignment>; numFmt?: string }
@@ -394,15 +410,31 @@ export async function POST(request: NextRequest) {
     .map((m) => ({ offset: m.top - remarkRow, left: m.left, bottom: m.bottom - remarkRow, right: m.right }))
 
   // ── Wipe everything from firstItemRow downwards (values + merges) ────────
-  // Drop merges in/below items zone (keep header-area merges)
-  const wsAny = ws as unknown as { _merges?: Record<string, { top: number }> }
-  if (wsAny._merges) {
-    for (const key of Object.keys(wsAny._merges)) {
-      const m = wsAny._merges[key]
-      if (m.top >= firstItemRow) delete wsAny._merges[key]
+  // ExcelJS stores live merges in ws._merges: Record<string, {model:{top,left,bottom,right}}>.
+  // The key is the top-left cell address (e.g. "A21"). We need to unmerge by full range string.
+  {
+    type MergeEntry = { model: { top: number; left: number; bottom: number; right: number } }
+    const wsInternal = ws as unknown as { _merges?: Record<string, MergeEntry> }
+    const mergesMap = wsInternal._merges
+    const toUnmerge: string[] = []
+    if (mergesMap) {
+      for (const [, entry] of Object.entries(mergesMap)) {
+        const m = entry?.model
+        if (m && m.top >= firstItemRow) {
+          // Build the full range string: e.g. "A21:J21"
+          const numToCol = (n: number) => {
+            let s = ''
+            while (n > 0) { s = String.fromCharCode(64 + (n % 26 || 26)) + s; n = Math.floor((n - 1) / 26) }
+            return s
+          }
+          toUnmerge.push(`${numToCol(m.left)}${m.top}:${numToCol(m.right)}${m.bottom}`)
+        }
+      }
+    }
+    for (const range of toUnmerge) {
+      try { ws.unMergeCells(range) } catch { /* ignore */ }
     }
   }
-  // Clear cell values from items zone + footer
   for (let r = firstItemRow; r <= ws.rowCount; r++) {
     const row = ws.getRow(r)
     for (let c = 1; c <= 13; c++) {
@@ -447,6 +479,27 @@ export async function POST(request: NextRequest) {
       row.getCell(10).font = { name: 'Arial', size: 10 }
       row.getCell(10).alignment = { vertical: 'top', horizontal: 'right' }
 
+      // Internal cost columns
+      if (includeInternalCosts) {
+        const costVal = fr.costPrice ?? 0
+        row.getCell(11).value = costVal
+        row.getCell(11).numFmt = '"USD"#,##0.00'
+        row.getCell(11).font = { name: 'Arial', size: 10 }
+        row.getCell(11).alignment = { vertical: 'top', horizontal: 'right' }
+
+        const marginAmt = fr.marginAmount ?? 0
+        row.getCell(12).value = marginAmt
+        row.getCell(12).numFmt = '"USD"#,##0.00'
+        row.getCell(12).font = { name: 'Arial', size: 10 }
+        row.getCell(12).alignment = { vertical: 'top', horizontal: 'right' }
+
+        const marginPct = fr.marginPercent ?? 0
+        row.getCell(13).value = marginPct / 100
+        row.getCell(13).numFmt = '0.0%'
+        row.getCell(13).font = { name: 'Arial', size: 10 }
+        row.getCell(13).alignment = { vertical: 'top', horizontal: 'right' }
+      }
+
       const lineCount = (fr.spec.match(/\n/g) || []).length + 1
       row.height = Math.max(18, lineCount * 14)
     }
@@ -457,18 +510,57 @@ export async function POST(request: NextRequest) {
   // ── Total row (right after items) ────────────────────────────────────────
   {
     const row = ws.getRow(cursor)
-    // Label spans D-I (where Specification is) so it sits next to the price
     row.getCell(4).value = 'TOTAL'
     row.getCell(4).font = { bold: true, name: 'Arial', size: 11 }
     row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
     try { ws.mergeCells(cursor, 4, cursor, 9) } catch { /* ignore */ }
-    row.getCell(10).value = totals.grandTotal
+    row.getCell(10).value = customerTotal
     row.getCell(10).numFmt = '"USD"#,##0.00'
     row.getCell(10).font = { bold: true, name: 'Arial', size: 11 }
     row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' }
     row.height = 22
     row.commit()
     cursor++
+  }
+
+  // ── Margin Summary block (internal mode only) ─────────────────────────────
+  if (includeInternalCosts) {
+    // Header row
+    {
+      const row = ws.getRow(cursor)
+      row.getCell(1).value = '📊 Margin Summary'
+      row.getCell(1).font = { bold: true, name: 'Arial', size: 10 }
+      row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } }
+      row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+      try { ws.mergeCells(cursor, 1, cursor, 10) } catch { /* ignore */ }
+      row.height = 20
+      row.commit()
+      cursor++
+    }
+
+    // 4 summary rows: label in D-I, value in J
+    const summaryRows: Array<{ label: string; value: number; isPercent?: boolean }> = [
+      { label: '客戶總價 / Customer Total', value: customerTotal },
+      { label: 'ITP 成本 / ITP Cost', value: costTotal },
+      { label: '毛利金額 / Margin $', value: marginTotal },
+      { label: '平均毛利率 / Avg Margin %', value: marginPercentAvg / 100, isPercent: true },
+    ]
+
+    for (const sr of summaryRows) {
+      const row = ws.getRow(cursor)
+      // Write label to col D without merging (avoids conflicts with template merges)
+      row.getCell(4).value = sr.label
+      row.getCell(4).font = { name: 'Arial', size: 10 }
+      row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' }
+
+      row.getCell(10).value = sr.value
+      row.getCell(10).numFmt = sr.isPercent ? '0.0%' : '"USD"#,##0.00'
+      row.getCell(10).font = { name: 'Arial', size: 10 }
+      row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' }
+      row.height = 18
+      row.commit()
+      cursor++
+    }
   }
 
   // ── Replay footer (Remark + terms + signature block) ─────────────────────

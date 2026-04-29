@@ -6,10 +6,69 @@ import { useQuoteStore } from '@/store/quote'
 import { formatUSD, nextRevisionNumber } from '@/lib/utils'
 import { Button, Input, Select, QtyInput, Label } from './ui'
 import type { Model } from '@/types/catalog'
-import type { CompanyProfile, ExportPayload, LineItem, QuoteEntity } from '@/types/quote'
+import type { CompanyProfile, ExportPayload, LineItem, QuoteEntity, QuoteTotals } from '@/types/quote'
 
 interface Props {
   models: Model[]
+}
+
+/** Apply markup to a cost price */
+function applyMarkup(cost: number, type: 'percent' | 'fixed', value: number): number {
+  if (!value || value <= 0) return cost
+  if (type === 'percent') return cost * (1 + value / 100)
+  return cost + value
+}
+
+/** Compute marginPercent safely (no divide-by-zero) */
+function calcMarginPercent(customerPrice: number, costPrice: number): number {
+  if (!costPrice || costPrice === 0) return 0
+  return (customerPrice / costPrice - 1) * 100
+}
+
+/** Compact margin editor for each line item */
+interface MarginEditorProps {
+  marginType: 'percent' | 'fixed'
+  marginValue: number
+  onTypeChange: (t: 'percent' | 'fixed') => void
+  onValueChange: (v: number) => void
+}
+function MarginEditor({ marginType, marginValue, onTypeChange, onValueChange }: MarginEditorProps) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const displayVal = draft !== null ? draft : (marginValue === 0 ? '' : String(marginValue))
+
+  const commitDraft = (raw: string) => {
+    const n = parseFloat(raw)
+    onValueChange(isNaN(n) || n < 0 ? 0 : n)
+    setDraft(null)
+  }
+
+  return (
+    <div className="flex items-center gap-0.5 mt-0.5">
+      {/* Type toggle */}
+      <div className="flex rounded overflow-hidden border border-gray-300 text-xs">
+        <button
+          className={`px-1.5 py-0.5 leading-none transition-colors ${marginType === 'percent' ? 'bg-brand-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+          onClick={() => onTypeChange('percent')}
+          title="Percent markup"
+        >%</button>
+        <button
+          className={`px-1.5 py-0.5 leading-none border-l border-gray-300 transition-colors ${marginType === 'fixed' ? 'bg-brand-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+          onClick={() => onTypeChange('fixed')}
+          title="Fixed $ markup"
+        >$</button>
+      </div>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="0"
+        value={displayVal}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commitDraft(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        className="w-14 text-xs border border-gray-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+      />
+    </div>
+  )
 }
 
 export function SummaryPanel({ models }: Props) {
@@ -42,32 +101,209 @@ export function SummaryPanel({ models }: Props) {
 
   const qty = store.selectedModel?.qty ?? 1
 
-  const totals = useMemo(() => {
-    const baseModel = (model?.itp ?? 0) * qty
-    const upgrades =
-      store.selectedUpgrades.reduce((s, u) => s + (u.itpAdder ?? 0), 0) * qty +
-      store.selectedBaseOptions.reduce((s, b) => s + (b.itp ?? 0) * b.qty, 0)
-    const peripherals = store.selectedPeripherals.reduce(
-      (s, p) => s + p.unitPrice * p.qty,
-      0
-    )
-    const licenses = store.selectedLicenses.reduce(
-      (s, l) => s + (l.itp ?? 0) * l.qty,
-      0
-    )
-    const others = store.selectedOthers.reduce(
-      (s, o) => s + o.unitPrice * o.qty,
-      0
-    )
-    return {
-      baseModel,
-      upgrades,
-      peripherals,
-      licenses,
-      others,
-      grandTotal: baseModel + upgrades + peripherals + licenses + others,
+  // ── Compute line items and totals with markup ──────────────────────────────
+  const { lineItems, totals } = useMemo(() => {
+    const items: LineItem[] = []
+
+    // Base model
+    if (model) {
+      const costPrice = (model.itp ?? 0) * qty
+      const mType = store.selectedModel?.marginType ?? 'percent'
+      const mVal = store.selectedModel?.marginValue ?? 0
+      const unitCost = model.itp ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const customerTotal = unitCustomer * qty
+      items.push({
+        category: 'Base Model',
+        description: `${model.terminal} / ${model.platform}`,
+        pn: model.id,
+        qty,
+        costPrice,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costPrice,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
     }
-  }, [model, qty, store.selectedUpgrades, store.selectedBaseOptions, store.selectedPeripherals, store.selectedLicenses, store.selectedOthers])
+
+    // Upgrades
+    store.selectedUpgrades.forEach((u) => {
+      const unitCost = u.itpAdder
+      const mType = u.marginType ?? 'percent'
+      const mVal = u.marginValue ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const costTotal = unitCost * qty
+      const customerTotal = unitCustomer * qty
+      items.push({
+        category: 'Upgrade',
+        description: u.description,
+        pn: '',
+        qty,
+        costPrice: costTotal,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costTotal,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
+    })
+
+    // Base options (add-on modules)
+    store.selectedBaseOptions.forEach((b) => {
+      const unitCost = b.itp
+      const mType = b.marginType ?? 'percent'
+      const mVal = b.marginValue ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const costTotal = unitCost * b.qty
+      const customerTotal = unitCustomer * b.qty
+      items.push({
+        category: 'Add-on Module',
+        description: b.description,
+        pn: '',
+        qty: b.qty,
+        costPrice: costTotal,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costTotal,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
+    })
+
+    // Peripherals
+    store.selectedPeripherals.forEach((p) => {
+      const unitCost = p.unitPrice
+      const mType = p.marginType ?? 'percent'
+      const mVal = p.marginValue ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const costTotal = unitCost * p.qty
+      const customerTotal = unitCustomer * p.qty
+      items.push({
+        category: 'Peripheral',
+        description: p.description,
+        pn: p.pn,
+        qty: p.qty,
+        costPrice: costTotal,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costTotal,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
+    })
+
+    // Licenses
+    store.selectedLicenses.forEach((l) => {
+      const unitCost = l.itp
+      const mType = l.marginType ?? 'percent'
+      const mVal = l.marginValue ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const costTotal = unitCost * l.qty
+      const customerTotal = unitCustomer * l.qty
+      items.push({
+        category: 'License',
+        description: l.description,
+        pn: l.pn,
+        qty: l.qty,
+        costPrice: costTotal,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costTotal,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
+    })
+
+    // Others
+    store.selectedOthers.forEach((o) => {
+      const unitCost = o.unitPrice
+      const mType = o.marginType ?? 'percent'
+      const mVal = o.marginValue ?? 0
+      const unitCustomer = applyMarkup(unitCost, mType, mVal)
+      const costTotal = unitCost * o.qty
+      const customerTotal = unitCustomer * o.qty
+      items.push({
+        category: o.category,
+        description: o.description,
+        pn: o.pn,
+        qty: o.qty,
+        costPrice: costTotal,
+        unitPrice: unitCustomer,
+        subtotal: customerTotal,
+        marginAmount: customerTotal - costTotal,
+        marginPercent: calcMarginPercent(unitCustomer, unitCost),
+        marginType: mType,
+        marginValue: mVal,
+      })
+    })
+
+    // Derive subtotals by category
+    const baseModelItems = items.filter((i) => i.category === 'Base Model')
+    const upgradeItems = items.filter((i) => i.category === 'Upgrade' || i.category === 'Add-on Module')
+    const peripheralItems = items.filter((i) => i.category === 'Peripheral')
+    const licenseItems = items.filter((i) => i.category === 'License')
+    const otherItems = items.filter(
+      (i) => !['Base Model', 'Upgrade', 'Add-on Module', 'Peripheral', 'License'].includes(i.category)
+    )
+
+    const sum = (arr: LineItem[], field: 'subtotal' | 'costPrice') =>
+      arr.reduce((s, i) => s + i[field], 0)
+
+    const custBase = sum(baseModelItems, 'subtotal')
+    const custUpgrades = sum(upgradeItems, 'subtotal')
+    const custPeripherals = sum(peripheralItems, 'subtotal')
+    const custLicenses = sum(licenseItems, 'subtotal')
+    const custOthers = sum(otherItems, 'subtotal')
+    const customerTotal = custBase + custUpgrades + custPeripherals + custLicenses + custOthers
+
+    const costBase = sum(baseModelItems, 'costPrice')
+    const costUpgrades = sum(upgradeItems, 'costPrice')
+    const costPeripherals = sum(peripheralItems, 'costPrice')
+    const costLicenses = sum(licenseItems, 'costPrice')
+    const costOthers = sum(otherItems, 'costPrice')
+    const costTotal = costBase + costUpgrades + costPeripherals + costLicenses + costOthers
+
+    const marginTotal = customerTotal - costTotal
+    const marginPercentAvg = costTotal > 0 ? (customerTotal / costTotal - 1) * 100 : 0
+
+    const derivedTotals: QuoteTotals = {
+      baseModel: custBase,
+      upgrades: custUpgrades,
+      peripherals: custPeripherals,
+      licenses: custLicenses,
+      others: custOthers,
+      grandTotal: customerTotal,
+      customerTotal,
+      costTotal,
+      marginTotal,
+      marginPercentAvg,
+      costSubtotals: {
+        baseModel: costBase,
+        upgrades: costUpgrades,
+        peripherals: costPeripherals,
+        licenses: costLicenses,
+        others: costOthers,
+        total: costTotal,
+      },
+    }
+
+    return { lineItems: items, totals: derivedTotals }
+  }, [
+    model,
+    qty,
+    store.selectedModel,
+    store.selectedUpgrades,
+    store.selectedBaseOptions,
+    store.selectedPeripherals,
+    store.selectedLicenses,
+    store.selectedOthers,
+  ])
 
   const selectedProfile = profiles.find((p) => p.id === store.selectedProfileId) ?? null
 
@@ -79,74 +315,6 @@ export function SummaryPanel({ models }: Props) {
   }, [selectedProfile?.id, selectedProfile?.defaultEntity])
 
   const buildPayload = (): ExportPayload => {
-    const lineItems: LineItem[] = []
-
-    if (model) {
-      lineItems.push({
-        category: 'Base Model',
-        description: `${model.terminal} / ${model.platform}`,
-        pn: model.id,
-        qty,
-        unitPrice: model.itp ?? 0,
-        subtotal: (model.itp ?? 0) * qty,
-      })
-    }
-
-    store.selectedUpgrades.forEach((u) => {
-      lineItems.push({
-        category: 'Upgrade',
-        description: u.description,
-        pn: '',
-        qty,
-        unitPrice: u.itpAdder,
-        subtotal: u.itpAdder * qty,
-      })
-    })
-
-    store.selectedBaseOptions.forEach((b) => {
-      lineItems.push({
-        category: 'Add-on Module',
-        description: b.description,
-        pn: '',
-        qty: b.qty,
-        unitPrice: b.itp,
-        subtotal: b.itp * b.qty,
-      })
-    })
-
-    store.selectedPeripherals.forEach((p) => {
-      lineItems.push({
-        category: 'Peripheral',
-        description: p.description,
-        pn: p.pn,
-        qty: p.qty,
-        unitPrice: p.unitPrice,
-        subtotal: p.unitPrice * p.qty,
-      })
-    })
-
-    store.selectedLicenses.forEach((l) => {
-      lineItems.push({
-        category: 'License',
-        description: l.description,
-        pn: l.pn,
-        qty: l.qty,
-        unitPrice: l.itp,
-        subtotal: l.itp * l.qty,
-      })
-    })
-
-    store.selectedOthers.forEach((o) => {
-      lineItems.push({
-        category: o.category,
-        description: o.description,
-        pn: o.pn,
-        qty: o.qty,
-        unitPrice: o.unitPrice,
-        subtotal: o.unitPrice * o.qty,
-      })
-    })
-
     return {
       profile: selectedProfile,
       quoteMeta: store.quoteMeta,
@@ -356,9 +524,75 @@ export function SummaryPanel({ models }: Props) {
         </div>
       </div>
 
+      {/* Line items with markup editors */}
+      {lineItems.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
+          <div className="font-semibold text-gray-700 text-xs uppercase tracking-wide mb-2">
+            {t.summaryTitle}
+          </div>
+          <div className="space-y-2">
+            {lineItems.map((item, idx) => {
+              const marginType = item.marginType ?? 'percent'
+              const marginValue = item.marginValue ?? 0
+
+              const onMarginChange = (mType: 'percent' | 'fixed', mVal: number) => {
+                if (item.category === 'Base Model') {
+                  store.setItemMargin('baseModel', 'baseModel', mType, mVal)
+                } else if (item.category === 'Upgrade') {
+                  const u = store.selectedUpgrades.find((u) => u.description === item.description)
+                  if (u) store.setItemMargin('upgrades', u.index, mType, mVal)
+                } else if (item.category === 'Add-on Module') {
+                  const b = store.selectedBaseOptions.find((b) => b.description === item.description)
+                  if (b) store.setItemMargin('baseOptions', b.index, mType, mVal)
+                } else if (item.category === 'Peripheral') {
+                  const p = store.selectedPeripherals.find((p) => p.pn === item.pn || p.description === item.description)
+                  if (p) store.setItemMargin('peripherals', p.key, mType, mVal)
+                } else if (item.category === 'License') {
+                  const l = store.selectedLicenses.find((l) => l.description === item.description)
+                  if (l) store.setItemMargin('licenses', l.index, mType, mVal)
+                } else {
+                  const o = store.selectedOthers.find((o) => o.description === item.description && o.pn === item.pn)
+                  if (o) store.setItemMargin('others', o.key, mType, mVal)
+                }
+              }
+
+              return (
+                <div key={idx} className="border border-gray-100 rounded p-2 text-xs">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-700 truncate block">{item.description}</span>
+                      <span className="text-gray-400">{item.category}</span>
+                    </div>
+                    <MarginEditor
+                      marginType={marginType}
+                      marginValue={marginValue}
+                      onTypeChange={(t) => onMarginChange(t, marginValue)}
+                      onValueChange={(v) => onMarginChange(marginType, v)}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px]">
+                      {t.costPrice}: {formatUSD(item.costPrice)}
+                    </span>
+                    {marginValue > 0 && (
+                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px]">
+                        +{marginType === 'percent' ? `${marginValue}%` : formatUSD(marginValue)}
+                      </span>
+                    )}
+                    <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px]">
+                      {t.customerPrice}: {formatUSD(item.subtotal)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Totals */}
       <div className="bg-white border border-gray-200 rounded-lg p-3 flex-1">
-        <div className="font-semibold text-gray-700 text-xs uppercase tracking-wide mb-3">{t.summaryTitle}</div>
+        <div className="font-semibold text-gray-700 text-xs uppercase tracking-wide mb-3">{t.grandTotal}</div>
         <div className="space-y-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-gray-500">{t.baseModelTotal}</span>
@@ -381,8 +615,29 @@ export function SummaryPanel({ models }: Props) {
             <span className="font-mono">{formatUSD(totals.others)}</span>
           </div>
           <div className="flex justify-between border-t border-gray-200 pt-2 font-bold text-sm">
-            <span>{t.grandTotal}</span>
-            <span className="font-mono text-brand-700">{formatUSD(totals.grandTotal)}</span>
+            <span>{t.customerGrandTotal}</span>
+            <span className="font-mono text-brand-700">{formatUSD(totals.customerTotal)}</span>
+          </div>
+        </div>
+
+        {/* Internal margin summary block — always visible (internal users only) */}
+        <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-xs space-y-1">
+          <div className="font-semibold text-slate-500 uppercase tracking-wide text-[10px] mb-1.5">
+            Internal / 毛利分析
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>{t.itpCost}</span>
+            <span className="font-mono">{formatUSD(totals.costTotal)}</span>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>{t.marginAmount}</span>
+            <span className="font-mono text-emerald-700">{formatUSD(totals.marginTotal)}</span>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>{t.marginPercentAvg}</span>
+            <span className="font-mono text-emerald-700">
+              {totals.marginPercentAvg.toFixed(1)}%
+            </span>
           </div>
         </div>
       </div>

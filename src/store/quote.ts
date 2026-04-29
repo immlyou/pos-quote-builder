@@ -42,6 +42,12 @@ interface QuoteState {
   removeOther: (key: string) => void
   setQuoteMeta: (meta: Partial<QuoteMeta>) => void
   setProfileId: (id: string | null) => void
+  setItemMargin: (
+    category: 'baseModel' | 'upgrades' | 'baseOptions' | 'peripherals' | 'licenses' | 'others',
+    key: string | number,
+    marginType: 'percent' | 'fixed',
+    marginValue: number
+  ) => void
   reset: () => void
   toDraft: () => string
   fromDraft: (json: string) => void
@@ -174,6 +180,47 @@ export const useQuoteStore = create<QuoteState>((set, get) => ({
     set((s) => ({ quoteMeta: { ...s.quoteMeta, ...meta } })),
 
   setProfileId: (id) => set({ selectedProfileId: id }),
+
+  setItemMargin: (category, key, marginType, marginValue) =>
+    set((s) => {
+      switch (category) {
+        case 'baseModel':
+          if (!s.selectedModel) return {}
+          return { selectedModel: { ...s.selectedModel, marginType, marginValue } }
+        case 'upgrades':
+          return {
+            selectedUpgrades: s.selectedUpgrades.map((u) =>
+              u.index === key ? { ...u, marginType, marginValue } : u
+            ),
+          }
+        case 'baseOptions':
+          return {
+            selectedBaseOptions: s.selectedBaseOptions.map((b) =>
+              b.index === key ? { ...b, marginType, marginValue } : b
+            ),
+          }
+        case 'peripherals':
+          return {
+            selectedPeripherals: s.selectedPeripherals.map((p) =>
+              p.key === key ? { ...p, marginType, marginValue } : p
+            ),
+          }
+        case 'licenses':
+          return {
+            selectedLicenses: s.selectedLicenses.map((l) =>
+              l.index === key ? { ...l, marginType, marginValue } : l
+            ),
+          }
+        case 'others':
+          return {
+            selectedOthers: s.selectedOthers.map((o) =>
+              o.key === key ? { ...o, marginType, marginValue } : o
+            ),
+          }
+        default:
+          return {}
+      }
+    }),
 
   reset: () =>
     set({

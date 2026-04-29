@@ -15,6 +15,8 @@ const BORDER = '#E5E7EB'
 const HEADER_BG = '#F2F2F2'
 const SECTION_BG = '#D9D9D9'
 const TEXT = '#111827'
+const MARGIN_BG = '#EEF2FF'
+const MARGIN_BORDER = '#C7D2FE'
 
 const styles = StyleSheet.create({
   page: {
@@ -70,7 +72,7 @@ const styles = StyleSheet.create({
     color: TEXT,
   },
   // Items table
-  tableWrap: { marginBottom: 8 },
+  tableWrap: { marginBottom: 4 },
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: HEADER_BG,
@@ -106,7 +108,7 @@ const styles = StyleSheet.create({
   },
   cell: { fontSize: 8, color: TEXT },
   cellRight: { fontSize: 8, color: TEXT, textAlign: 'right' },
-  // Column widths
+  // Column widths — standard
   colItem: { width: '5%' },
   colModel: { width: '12%' },
   colSpec: { width: '55%' },
@@ -118,7 +120,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     marginTop: 4,
-    marginBottom: 10,
+    marginBottom: 6,
     paddingTop: 4,
     borderTopWidth: 0.5,
     borderTopColor: DARK,
@@ -134,6 +136,45 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
     color: DARK,
     width: 80,
+    textAlign: 'right',
+  },
+  // Margin summary block
+  marginSummaryBlock: {
+    backgroundColor: MARGIN_BG,
+    borderWidth: 0.5,
+    borderColor: MARGIN_BORDER,
+    borderRadius: 3,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  marginSummaryTitle: {
+    fontSize: 7.5,
+    fontFamily: 'Helvetica-Bold',
+    color: '#4338CA',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  marginSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  marginSummaryLabel: {
+    fontSize: 8,
+    color: '#374151',
+  },
+  marginSummaryValue: {
+    fontSize: 8,
+    fontFamily: 'Helvetica-Bold',
+    color: '#1F2937',
+    textAlign: 'right',
+  },
+  marginSummaryValueGreen: {
+    fontSize: 8,
+    fontFamily: 'Helvetica-Bold',
+    color: '#065F46',
     textAlign: 'right',
   },
   // Remarks
@@ -189,6 +230,10 @@ function fmt(n: number): string {
   return `USD ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function fmtPct(n: number): string {
+  return `${n.toFixed(1)}%`
+}
+
 interface Props {
   payload: ExportPayload & {
     expiresAt?: string | null
@@ -204,11 +249,17 @@ export function QuotePDF({ payload }: Props) {
   const includeInternalCosts = payload.includeInternalCosts ?? false
   const terms = payload.terms?.length ? payload.terms : getTerms(entity)
 
+  // Derive totals with backwards-compat fallback
+  const customerTotal = totals.customerTotal ?? totals.grandTotal ?? 0
+  const costTotal = totals.costTotal ?? customerTotal
+  const marginTotal = totals.marginTotal ?? (customerTotal - costTotal)
+  const marginPercentAvg = totals.marginPercentAvg ?? (costTotal > 0 ? (customerTotal / costTotal - 1) * 100 : 0)
+
   // Build flat display rows
   type DisplayRow =
     | { kind: 'header' }
     | { kind: 'section'; label: string }
-    | { kind: 'item'; itemNum: string | number; model: string; spec: string; unitPrice: number }
+    | { kind: 'item'; itemNum: string | number; model: string; spec: string; unitPrice: number; costPrice: number; marginAmount: number; marginPercent: number }
 
   const displayRows: DisplayRow[] = []
 
@@ -223,11 +274,29 @@ export function QuotePDF({ payload }: Props) {
   let itemNum = 1
 
   for (const bm of baseItems) {
-    displayRows.push({ kind: 'item', itemNum, model: bm.pn || bm.description, spec: bm.description, unitPrice: bm.unitPrice })
+    displayRows.push({
+      kind: 'item',
+      itemNum,
+      model: bm.pn || bm.description,
+      spec: bm.description,
+      unitPrice: bm.unitPrice,
+      costPrice: bm.costPrice ?? bm.unitPrice,
+      marginAmount: bm.marginAmount ?? 0,
+      marginPercent: bm.marginPercent ?? 0,
+    })
     if (upgradeItems.length > 0) {
       let sub = 1
       for (const u of upgradeItems) {
-        displayRows.push({ kind: 'item', itemNum: `${itemNum}.${sub}`, model: u.pn || '', spec: u.description, unitPrice: u.unitPrice })
+        displayRows.push({
+          kind: 'item',
+          itemNum: `${itemNum}.${sub}`,
+          model: u.pn || '',
+          spec: u.description,
+          unitPrice: u.unitPrice,
+          costPrice: u.costPrice ?? u.unitPrice,
+          marginAmount: u.marginAmount ?? 0,
+          marginPercent: u.marginPercent ?? 0,
+        })
         sub++
       }
     }
@@ -237,7 +306,16 @@ export function QuotePDF({ payload }: Props) {
   if (peripheralItems.length > 0) {
     displayRows.push({ kind: 'section', label: 'General Peripherals' })
     for (const p of peripheralItems) {
-      displayRows.push({ kind: 'item', itemNum, model: p.pn || p.description, spec: p.description, unitPrice: p.unitPrice })
+      displayRows.push({
+        kind: 'item',
+        itemNum,
+        model: p.pn || p.description,
+        spec: p.description,
+        unitPrice: p.unitPrice,
+        costPrice: p.costPrice ?? p.unitPrice,
+        marginAmount: p.marginAmount ?? 0,
+        marginPercent: p.marginPercent ?? 0,
+      })
       itemNum++
     }
   }
@@ -245,7 +323,16 @@ export function QuotePDF({ payload }: Props) {
   if (licenseItems.length > 0) {
     displayRows.push({ kind: 'section', label: 'Licenses' })
     for (const l of licenseItems) {
-      displayRows.push({ kind: 'item', itemNum, model: l.pn || l.description, spec: l.description, unitPrice: l.unitPrice })
+      displayRows.push({
+        kind: 'item',
+        itemNum,
+        model: l.pn || l.description,
+        spec: l.description,
+        unitPrice: l.unitPrice,
+        costPrice: l.costPrice ?? l.unitPrice,
+        marginAmount: l.marginAmount ?? 0,
+        marginPercent: l.marginPercent ?? 0,
+      })
       itemNum++
     }
   }
@@ -253,7 +340,16 @@ export function QuotePDF({ payload }: Props) {
   if (otherItems.length > 0) {
     displayRows.push({ kind: 'section', label: 'Others' })
     for (const o of otherItems) {
-      displayRows.push({ kind: 'item', itemNum, model: o.pn || o.description, spec: o.description, unitPrice: o.unitPrice })
+      displayRows.push({
+        kind: 'item',
+        itemNum,
+        model: o.pn || o.description,
+        spec: o.description,
+        unitPrice: o.unitPrice,
+        costPrice: o.costPrice ?? o.unitPrice,
+        marginAmount: o.marginAmount ?? 0,
+        marginPercent: o.marginPercent ?? 0,
+      })
       itemNum++
     }
   }
@@ -363,8 +459,8 @@ export function QuotePDF({ payload }: Props) {
                   <Text style={[styles.cellRight, styles.colPrice]}>{fmt(row.unitPrice)}</Text>
                   {includeInternalCosts && (
                     <>
-                      <Text style={[styles.cellRight, styles.colCost]}></Text>
-                      <Text style={[styles.cellRight, styles.colMargin]}></Text>
+                      <Text style={[styles.cellRight, styles.colCost]}>{fmt(row.costPrice)}</Text>
+                      <Text style={[styles.cellRight, styles.colMargin]}>{fmtPct(row.marginPercent)}</Text>
                     </>
                   )}
                 </View>
@@ -377,8 +473,31 @@ export function QuotePDF({ payload }: Props) {
         {/* Grand total */}
         <View style={styles.totalBlock}>
           <Text style={styles.totalLabel}>TOTAL</Text>
-          <Text style={styles.totalValue}>{fmt(totals.grandTotal)}</Text>
+          <Text style={styles.totalValue}>{fmt(customerTotal)}</Text>
         </View>
+
+        {/* Margin Summary block (internal mode) */}
+        {includeInternalCosts && (
+          <View style={styles.marginSummaryBlock}>
+            <Text style={styles.marginSummaryTitle}>Margin Summary / 毛利摘要</Text>
+            <View style={styles.marginSummaryRow}>
+              <Text style={styles.marginSummaryLabel}>客戶總價 / Customer Total</Text>
+              <Text style={styles.marginSummaryValue}>{fmt(customerTotal)}</Text>
+            </View>
+            <View style={styles.marginSummaryRow}>
+              <Text style={styles.marginSummaryLabel}>ITP 成本 / ITP Cost</Text>
+              <Text style={styles.marginSummaryValue}>{fmt(costTotal)}</Text>
+            </View>
+            <View style={styles.marginSummaryRow}>
+              <Text style={styles.marginSummaryLabel}>毛利金額 / Margin $</Text>
+              <Text style={styles.marginSummaryValueGreen}>{fmt(marginTotal)}</Text>
+            </View>
+            <View style={styles.marginSummaryRow}>
+              <Text style={styles.marginSummaryLabel}>平均毛利率 / Avg Margin %</Text>
+              <Text style={styles.marginSummaryValueGreen}>{fmtPct(marginPercentAvg)}</Text>
+            </View>
+          </View>
+        )}
 
         {/* Remark / Terms */}
         <Text style={styles.remarkTitle}>Remark：</Text>

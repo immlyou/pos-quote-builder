@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.1.3'
+export const APP_VERSION = '1.2.0'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,20 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-04-29',
+    highlights: [
+      {
+        zh: '每一品項新增毛利/加成欄位（% 或 $），右邊摘要面板即時顯示成本／毛利／客戶價',
+        en: 'Per-line-item markup field (% or $); summary panel now shows cost / margin / customer prices live',
+      },
+      {
+        zh: '匯出 Excel/PDF 內部模式新增「毛利摘要」區塊（客戶總價 / 成本 / 毛利金額 / 平均毛利率）',
+        en: 'Internal-mode Excel/PDF exports now append a Margin Summary block',
+      },
+    ],
+  },
   {
     version: '1.1.3',
     date: '2026-04-29',

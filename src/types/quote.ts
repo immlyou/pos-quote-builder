@@ -25,8 +25,13 @@ export interface LineItem {
   description: string
   pn: string
   qty: number
-  unitPrice: number
-  subtotal: number
+  costPrice: number        // the ITP cost
+  unitPrice: number        // customer-facing price after markup
+  subtotal: number         // unitPrice * qty (customer-facing)
+  marginAmount: number     // unitPrice - costPrice
+  marginPercent: number    // (unitPrice / costPrice - 1) * 100, capped to 0 when costPrice=0
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface QuoteTotals {
@@ -35,7 +40,19 @@ export interface QuoteTotals {
   peripherals: number
   licenses: number
   others: number
-  grandTotal: number
+  grandTotal: number       // alias for customerTotal (backwards compat)
+  customerTotal: number
+  costTotal: number
+  marginTotal: number
+  marginPercentAvg: number
+  costSubtotals: {
+    baseModel: number
+    upgrades: number
+    peripherals: number
+    licenses: number
+    others: number
+    total: number
+  }
 }
 
 export interface GroupedItem {
@@ -60,12 +77,16 @@ export interface ExportPayload {
 export interface SelectedModel {
   modelId: string
   qty: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface SelectedUpgrade {
   index: number
   description: string
   itpAdder: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface SelectedBaseOption {
@@ -73,6 +94,8 @@ export interface SelectedBaseOption {
   description: string
   itp: number
   qty: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface SelectedPeripheral {
@@ -82,6 +105,8 @@ export interface SelectedPeripheral {
   series: string
   qty: number
   unitPrice: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface SelectedLicense {
@@ -90,6 +115,8 @@ export interface SelectedLicense {
   pn: string
   itp: number
   qty: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
 
 export interface SelectedOther {
@@ -99,4 +126,6 @@ export interface SelectedOther {
   pn: string
   qty: number
   unitPrice: number
+  marginType?: 'percent' | 'fixed'
+  marginValue?: number
 }
