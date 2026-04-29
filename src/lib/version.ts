@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.2.1'
+export const APP_VERSION = '1.2.2'
 
 export interface ChangelogEntry {
   version: string
@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.2',
+    date: '2026-04-30',
+    highlights: [
+      {
+        zh: '摘要面板每行新增 × 數量徽章；數量 > 1 時成本顯示「單價 × N = 總額」格式，毛利推算更直觀',
+        en: 'Summary panel rows now show × quantity badge; cost displays as "unit × N = total" when qty > 1 for clearer markup math',
+      },
+    ],
+  },
   {
     version: '1.2.1',
     date: '2026-04-29',

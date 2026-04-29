@@ -556,12 +556,21 @@ export function SummaryPanel({ models }: Props) {
                 }
               }
 
+              const unitCost = item.qty > 0 ? item.costPrice / item.qty : item.costPrice
+              const showQty = item.qty > 1
               return (
                 <div key={idx} className="border border-gray-100 rounded p-2 text-xs">
                   <div className="flex items-start justify-between gap-1">
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-700 truncate block">{item.description}</span>
-                      <span className="text-gray-400">{item.category}</span>
+                      <span className="text-gray-400">
+                        {item.category}
+                        {showQty && (
+                          <span className="ml-1.5 inline-flex items-center bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                            × {item.qty}
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <MarginEditor
                       marginType={marginType}
@@ -571,11 +580,18 @@ export function SummaryPanel({ models }: Props) {
                     />
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px]">
-                      {t.costPrice}: {formatUSD(item.costPrice)}
+                    <span
+                      className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px]"
+                      title={showQty ? `${formatUSD(unitCost)} × ${item.qty}` : undefined}
+                    >
+                      {t.costPrice}: {showQty ? `${formatUSD(unitCost)} × ${item.qty} = ` : ''}
+                      {formatUSD(item.costPrice)}
                     </span>
                     {marginValue > 0 && (
-                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px]" title={marginType === 'percent' ? `${marginValue}% per unit` : `+${formatUSD(marginValue)} per unit`}>
+                      <span
+                        className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px]"
+                        title={marginType === 'percent' ? `${marginValue}% per unit` : `+${formatUSD(marginValue)} per unit`}
+                      >
                         {marginType === 'percent' ? `+${marginValue}%` : `+${formatUSD(item.marginAmount)}`}
                       </span>
                     )}
